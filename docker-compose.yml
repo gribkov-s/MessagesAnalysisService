@@ -1,0 +1,93 @@
+version: "3"
+
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    hostname: namenode
+    restart: always
+    ports:
+      - 9870:9870
+      - 9000:9000
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+      - ./sample_data:/sample_data
+    environment:
+      - CLUSTER_NAME=test
+    env_file:
+      - ./hadoop.env
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    hostname: datanode
+    restart: always
+    ports:
+      - 9866:9866
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:5.5.0
+    hostname: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  broker:
+    image: confluentinc/cp-kafka:5.5.0
+    hostname: broker
+    depends_on:
+      - zookeeper
+    ports:
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1  
+      KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      KAFKA_CREATE_TOPICS: "messages:1:1"
+    volumes:
+     - /var/run/docker.sock:/var/run/docker.sock
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:5.5.0
+    hostname: schema-registry
+    container_name: schema-registry
+    depends_on:
+      - broker
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'broker:9092'
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081        
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    environment:
+      TZ: Europe/Amsterdam
+      POSTGRES_USER: docker
+      POSTGRES_PASSWORD: docker
+      LISTEN_ADDRESSES: '*'
+    ports:
+      - "5432:5432"
+    volumes:
+      - "./sql:/docker-entrypoint-initdb.d"            
+  
+volumes:
+  hadoop_namenode:
+  hadoop_datanode:
